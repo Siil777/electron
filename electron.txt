@@ -1,0 +1,118 @@
+main:
+
+ipcMain.on('save-entry', async (event, entryText) => {
+    const filePath = path.join(__dirname, 'SavedDiary.txt');
+    try {
+        await fs.appendFile(filePath, entryText + '\n');
+        console.log('Entry saved successfully.');
+        event.reply('entry-saved');
+    } catch (err) {
+        console.error(err);
+        dialog.showErrorBox('Error', 'An error occurred while saving the entry.');
+    }
+});
+app.whenReady().then(createWindow);
+
+renderer:
+
+// Handle the click event of the "Save Entry" button
+function saveEntry() {
+    const entryText = document.getElementById('entry').value;
+
+    if (!entryText) {
+        alert('Please enter a diary entry.');
+        return;
+    }
+
+    // Use the exposed electron.saveEntry function to save the entry
+    window.api.send('save-entry', entryText);
+
+
+    // Display a success message
+    alert('Entry saved successfully.');
+
+    // Optionally, clear the textarea after saving
+    document.getElementById('entry').value = '';
+}
+
+// Send a message to the main process on button click
+document.getElementById('save-button').addEventListener('click', () => {
+    saveEntry();
+});
+
+// Load and display saved entries when the page loads
+window.addEventListener('DOMContentLoaded', () => {
+    // Send a message to the main process to load entries
+    window.api.send('load-entries');
+});
+
+// Handle the loaded entries
+window.api.receive('entries-loaded', (entries) => {
+    const entryList = document.getElementById('entry-list');
+    entryList.innerHTML = ''; // Clear the existing entries
+
+    // Loop through the loaded entries and create list items
+    entries.forEach((entry, index) => {
+        const listItem = document.createElement('li');
+        listItem.textContent = entry;
+        entryList.appendChild(listItem);
+    });
+});
+
+preload:
+
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('api', {
+    send: (channel, data) => {
+        ipcRenderer.send(channel, data);
+    },
+    receive: (channel, func) => {
+        ipcRenderer.on(channel, (event, ...args) => func(...args));
+    },
+    saveEntry: async (entryText) => {
+        try {
+            await ipcRenderer.invoke('save-entry', entryText);
+            // Emit a custom event to notify the renderer process that the entry was saved successfully.
+            window.dispatchEvent(new Event('entry-saved'));
+        } catch (err) {
+            console.error(err);
+            alert('An error occurred while saving the entry.');
+        }
+    },
+});
+
+html:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Digital Diary</title>
+</head>
+<body>
+<h1>Digital Diary</h1>
+
+<label for="entry"></label>
+<textarea id="entry" placeholder="Write your diary entry here"></textarea>
+<button id="save-button">Save</button>
+
+<h2>Saved Entries</h2>
+<ul id="entry-list"></ul>
+
+<script src="renderer.js"></script>
+</body>
+</html>
+
+
+renderer part:
+window.api.receive('entries-loaded', (entries) => {
+    const entryList = document.getElementById('entry-list');
+    entryList.innerHTML = ''; // Clear the existing entries
+
+    // Loop through the loaded entries and create list items
+    entries.forEach((entry, index) => {
+        const listItem = document.createElement('li');
+        listItem.textContent = entry;
+        entryList.appendChild(listItem);
+    });
+});
